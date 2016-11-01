@@ -1,5 +1,5 @@
-# pokemon-simulator
-<h1> Text-based (for the time being) simulator of the Challenge Cup format in Pokémon. In this format, teams are composed of random Pokémon, random moves, and random stats. </h1>
+<h1> Pokémon Simulator </h1>
+<h3> Text-based (for the time being) simulator of the Challenge Cup format in Pokémon. In this format, teams are composed of random Pokémon, random moves, and random stats. </h3>
 <ul>
 <li> Written in Python
 <li> Uses the RESTful API of pokeapi.co to pull data of Pokémon </li>
