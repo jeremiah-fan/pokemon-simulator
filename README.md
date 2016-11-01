@@ -13,5 +13,5 @@
 <li> Types </li>
 <li> Various battle and move effects </li>
 <li> Effort values and individual values </li>
-<li> Properamage calculations </li>
+<li> Proper damage calculations </li>
 </ul>
