@@ -9,9 +9,7 @@
 
 <ul> <h5> TO DO: </h5>
 <li> Implement assorted moves </li>
-<li> Critical hits </li>
 <li> Various battle and move effects </li>
 <li> Effort values and individual values </li>
-<li> Proper damage calculations </li>
 <li> Priority and switching </li>
 </ul>
