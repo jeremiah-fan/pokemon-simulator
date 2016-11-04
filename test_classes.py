@@ -15,6 +15,8 @@ cur.executescript('''
 CREATE TABLE IF NOT EXISTS BasePokemon (
 	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
 	name TEXT,
+	type1 TEXT,
+	type2 TEXT,
 	baseHP INTEGER NOT NULL,
 	baseATT INTEGER NOT NULL,
 	baseDEF INTEGER NOT NULL,
@@ -26,6 +28,7 @@ CREATE TABLE IF NOT EXISTS BasePokemon (
 CREATE TABLE IF NOT EXISTS Moves (
 	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
 	name TEXT,
+	type TEXT,
 	basePower INTEGER NOT NULL
 );
 
@@ -57,6 +60,8 @@ class GameManager:
 		print('You are challenged by {}!'.format(self._opponent.name))
 		print('Go! {}!'.format(self._player.getCurPkmn().name))
 		print('{} sent out {}!'.format(self._opponent.name, self._opponent.getCurPkmn().name))
+		
+	def play(self):
 		while self.gameover == False:
 			self.turn()
 	
@@ -84,13 +89,15 @@ class GameManager:
 			return random.choice(options) #Speed Tie, ordering is randomly determined
 	
 	def execMove(self, player, move, receiver):
+		if move == None:
+			return 1
 		pkmn = player.getCurPkmn()
 		rcvPkmn = receiver.getCurPkmn()
 		attackmsg = '{} used {}!'.format(pkmn.name, move.name)
 		if player.type == Trainer.OPPONENT:
 			attackmsg = 'The opposing {}'.format(attackmsg)
 		print(attackmsg)
-		if rcvPkmn.takedmg(move.power) == True:
+		if pkmn.inflictdmg(move, rcvPkmn) == True:
 			faintmsg = '{} fainted!'.format(rcvPkmn.name)
 			if receiver.type == Trainer.OPPONENT:
 				faintmsg = 'The opposing {}'.format(faintmsg)
@@ -127,10 +134,23 @@ class Trainer:
 		if self.type == Trainer.PLAYER:
 			for num in range(Trainer.NUM_PKMN):
 				while True:
-					pkmnname = input('Pokemon #{}: '.format(num + 1))
-					if pkmnname.strip() != '' and not pkmnname.isdigit():
+					pkmnname = input('Pokemon #{}: '.format(num + 1)).strip()
+					if pkmnname == '':
 						cur.execute('''
-						SELECT name, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD FROM BasePokemon WHERE name = ?
+						SELECT COUNT(*) FROM BasePokemon
+						''')
+						if cur.fetchone()[0] > 0:
+							cur.execute('''
+							SELECT name FROM BasePokemon
+							ORDER BY RANDOM()
+							LIMIT 1
+							''')
+							pkmnname = cur.fetchone()[0]
+							print('No input, selecting random Pokemon: {}'.format(pkmnname))
+							break;
+					elif not pkmnname.isdigit():
+						cur.execute('''
+						SELECT * FROM BasePokemon WHERE name = ?
 						''', (pkmnname.capitalize(), ))
 						if cur.fetchone() != None:	
 							break
@@ -144,15 +164,24 @@ class Trainer:
 						
 						try:
 							contents = urllib.request.urlopen(req).read().decode('utf-8')
-							js = json.loads(str(contents))
-							stats = js['stats']
-							cur.execute('''
-							INSERT INTO BasePokemon(name, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD) VALUES (?, ?, ?, ?, ?, ?, ?)
-							''', (pkmnname.capitalize(), stats[5]['base_stat'], stats[4]['base_stat'], stats[3]['base_stat'], stats[2]['base_stat'], stats[1]['base_stat'], stats[0]['base_stat']))
-							break
 						except:
 							print('Not a valid Pokemon name, try again')
 							continue
+							
+						js = json.loads(str(contents))
+						stats = js['stats']
+						types = js['types']
+						if len(types) == 2: #Dual typing
+							type1 = types[1]['type']['name'].capitalize()
+							type2 = types[0]['type']['name'].capitalize()
+						else:
+							type1 = types[0]['type']['name'].capitalize()
+							type2 = None
+							
+						cur.execute('''
+						INSERT INTO BasePokemon(name, type1, type2, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+						''', (pkmnname.capitalize(), type1, type2, stats[5]['base_stat'], stats[4]['base_stat'], stats[3]['base_stat'], stats[2]['base_stat'], stats[1]['base_stat'], stats[0]['base_stat']))
+						break
 					print('Not a valid Pokemon name, try again')
 				
 				self._trainer_pkmn.append(Pokemon(pkmnname.capitalize(), self))
@@ -179,20 +208,41 @@ class Trainer:
 		
 	def showPkmn(self):
 		for pkmn in self._trainer_pkmn:
-			print('{} Lv. {}\n{}/{}'.format(pkmn.name, pkmn.level, pkmn.stats[Pokemon.HP], pkmn.maxHP))
+			print('{name} Lv. {lv}\n{type}\n{curHP}/{maxHP}'.format(name=pkmn.name, lv=pkmn.level, type='/'.join([x for x in pkmn.type if x != None]), curHP=pkmn.stats[Pokemon.HP], maxHP=pkmn.maxHP))
 		print()
+	
+	def switch(self, pkmn):
+		pkmn_index = self._trainer_pkmn.index(pkmn)
+		self._trainer_pkmn[self.cur_pkmn_index], self._trainer_pkmn[pkmn_index] = self._trainer_pkmn[pkmn_index], self._trainer_pkmn[self.cur_pkmn_index]
 	
 	def getMove(self):
 		pkmn = self.getCurPkmn()
 		if self.type == Trainer.OPPONENT:
 			return random.choice(pkmn.moves)
 		while True:
-			movenum = input('{}(1) {}(2) {}(3) {}(4) Party(p): '.format(pkmn.moves[0].name, pkmn.moves[1].name, pkmn.moves[2].name, pkmn.moves[3].name))
+			movenum = input('{0}(1) {1}(2) {2}(3) {3}(4) Party(p): '.format(pkmn.moves[0].name, pkmn.moves[1].name, pkmn.moves[2].name, pkmn.moves[3].name))
 			if movenum.isdigit() and int(movenum) >= 1 and int(movenum) <= 4:
 				return pkmn.moves[int(movenum) - 1]
 			elif movenum == 'p':
 				self.showPkmn()
-				
+				goback = False
+				while True:
+					pkmnname = input('Pokemon to switch to: (press b to go back)')
+					if pkmnname == 'b':
+						goback = True
+						break
+					find = [x for x in self._trainer_pkmn if x.name == pkmnname.capitalize()]
+					if len(find) > 0:
+						pkmn = find[0]
+						if pkmn.stats[Pokemon.HP] > 0:
+							print('{trainer} withdrew {name}!'.format(trainer=self.name, name=self.getCurPkmn().name))
+							self.switch(pkmn)
+							print('{trainer} sent out {name}!'.format(trainer=self.name, name=self.getCurPkmn().name))
+							break
+						print('That Pokemon is too weak to fight!')
+					print('Not a valid Pokemon name, try again')
+				if goback == False:
+					return None
 			else:
 				print("Oak's words echoed... There's a time and place for everything but not now!")
 		
@@ -211,19 +261,53 @@ class Pokemon:
 		self.trainer = trainer
 		self.name = name
 		self.faint = False
-		self.moves = [Move('test')] * Pokemon.NUM_MOVES
+		self.moves = [Move('Tackle')] * Pokemon.NUM_MOVES
 		self.level = 50
 		cur.execute('''
-		SELECT name, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD FROM BasePokemon WHERE name = ?
+		SELECT type1, type2, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD FROM BasePokemon WHERE name = ?
 		''', (name, ))
-		basestats = list(cur.fetchone()[1:])
+		queryresults = cur.fetchone()
+		self.type = (queryresults[0], queryresults[1])
+		basestats = list(queryresults[2:])
 		self.stats = [(x * 2 + 31) * self.level // 100 + 5 for x in basestats]
 		self.stats[0] += self.level + 5
 		self.maxHP = self.stats[0]
 	
 	def getTrainer(self):
 		return self.trainer
-			
+	
+	def inflictdmg(self, move, pkmn):
+		if move.damage_class == "physical":
+			attstat = Pokemon.ATT
+			defstat = Pokemon.DEF
+		else: #if move is special, use the special att and special def stats to calculate dmg
+			attstat = Pokemon.SPATT
+			defstat = Pokemon.SPDEF
+		#damage formula, not accounting for STAB and type and the weird small modifiers
+		dmg = (((2 * self.level + 10) / 250) * (self.stats[attstat] / pkmn.stats[defstat]) * move.power + 2) * random.uniform(0.85, 1)
+		
+		if self.type[0] == move.type or (self.type[1] != None and self.type[1] == move.type):
+			dmg *= 1.5 #Same Type Attack Bonus (STAB)
+		
+		type_multiplier = 1
+		for type in pkmn.type:
+			if type != None and type in Move.typechart[move.type]:
+				type_multiplier *= Move.typechart[move.type][type]
+		
+		if type_multiplier == 0:
+			print('It has no effect...')
+		elif type_multiplier > 1:
+			print('It\'s super effective!')
+		elif type_multiplier < 1:
+			print('It\'s not very effective...')
+		dmg *= type_multiplier
+		
+		if random.random() < 0.0625:
+			print('A critical hit!')
+			dmg *= 1.5 #specific to generation VI
+		
+		return pkmn.takedmg(int(dmg))
+	
 	def takedmg(self, amt):
 		self.stats[Pokemon.HP] = max(0, self.stats[Pokemon.HP] - amt)
 		if self.stats[Pokemon.HP] == 0:
@@ -231,8 +315,29 @@ class Pokemon:
 		return self.faint
 
 class Move:
+	typechart = {'Normal': {'Rock': 0.5, 'Ghost': 0, 'Steel': 0.5},
+				'Fire': {'Fire': 0.5, 'Water': 0.5, 'Grass': 2, 'Ice': 2, 'Bug': 2, 'Rock': 0.5, 'Dragon': 0.5, 'Steel': 2},
+				'Water': {'Fire': 2, 'Water': 0.5, 'Grass': 0.5, 'Ground': 2, 'Rock': 2, 'Dragon': 0.5},
+				'Electric': {'Water': 2, 'Electric': 0.5, 'Grass': 0.5, 'Ground': 0, 'Flying': 2, 'Dragon': 0.5},
+				'Grass': {'Fire': 0.5, 'Water': 2, 'Grass': 0.5, 'Poison': 0.5, 'Ground': 2, 'Flying': 0.5, 'Bug': 0.5, 'Rock': 2, 'Dragon': 0.5, 'Steel': 0.5},
+				'Ice': {'Fire': 0.5, 'Water': 0.5, 'Grass': 2, 'Ice': 0.5, 'Ground': 2, 'Flying': 2, 'Dragon': 2, 'Steel': 0.5},
+				'Fighting': {'Normal': 2, 'Ice': 2, 'Poison': 0.5, 'Flying': 0.5, 'Psychic': 0.5, 'Bug': 0.5, 'Rock': 2, 'Ghost': 0, 'Dark': 2, 'Steel': 2, 'Fairy': 0.5},
+				'Poison': {'Grass': 2, 'Poison': 0.5, 'Ground': 0.5, 'Rock': 0.5, 'Ghost': 0.5, 'Steel': 0, 'Fairy': 2},
+				'Ground': {'Fire': 2, 'Electric': 2, 'Grass': 0.5, 'Poison': 2, 'Flying': 0, 'Bug': 0.5, 'Rock': 2, 'Steel': 2},
+				'Flying': {'Electric': 0.5, 'Grass': 2, 'Fighting': 2, 'Bug': 2, 'Rock': 0.5, 'Steel': 0.5},
+				'Psychic': {'Fighting': 2, 'Poison': 2, 'Psychic': 0.5, 'Dark': 0, 'Steel': 0.5},
+				'Bug': {'Fire': 0.5, 'Grass': 2, 'Fighting': 0.5, 'Poison': 0.5, 'Flying': 0.5, 'Psychic': 2, 'Ghost': 0.5, 'Dark': 2, 'Steel': 0.5, 'Fairy': 0.5},
+				'Rock': {'Fire': 2, 'Ice': 2, 'Fighting': 0.5, 'Ground': 0.5, 'Flying': 2, 'Bug': 2, 'Steel': 0.5},
+				'Ghost': {'Normal': 0, 'Psychic': 2, 'Ghost': 2, 'Dark': 0.5},
+				'Dragon': {'Dragon': 2, 'Steel': 0.5, 'Fairy': 0},
+				'Dark': {'Fighting': 0.5, 'Psychic': 2, 'Ghost': 2, 'Dark': 0.5, 'Fairy': 0.5},
+				'Steel': {'Fire': 0.5, 'Water': 0.5, 'Electric': 0.5, 'Ice': 2, 'Rock': 2, 'Steel': 0.5, 'Fairy': 2},
+				'Fairy': {'Fire': 0.5, 'Fighting': 2, 'Poison': 0.5, 'Dragon': 2, 'Dark': 2, 'Steel': 0.5}
+				}
+				
 	def __init__(self, name):
 		self.name = name
 		self.power = 50
-		self.damage_class = 'physical'	
+		self.type = 'Normal'
+		self.damage_class = 'physical'
 		
