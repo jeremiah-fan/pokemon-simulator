@@ -8,8 +8,14 @@
 </ul>
 
 <ul> <h5> TO DO: </h5>
-<li> Implement assorted moves </li>
-<li> Various battle and move effects </li>
+<li> Various battle and move effects - OF MAIN IMPORTANCE </li>
 <li> Effort values and individual values </li>
-<li> Priority and switching </li>
+<li> Priority </li>
+<li> Natures </li>
+</ul>
+
+<ul> <h5> Completed Functionality: <h5>
+<li> 11/11/2016 - Pokemon now have random moves from the pool of moves they can potentially learn using many to many relationship </li>
+<li> 11/04/2016 - Types and type matchups, move damage classes, switching </li>
+<li> 11/01/2016 - Shell and interaction created, establishes player vs. AI, simple priority calculations, damage calculations, full caching of Pokemon </li>
 </ul>
