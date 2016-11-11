@@ -7,6 +7,13 @@
 <li> Caches Pokémon using sqlite3 into a database to avoid the cost of repeatedly fetching pages </li>
 </ul>
 
+<ul> <h3> CONTENTS: </h3>
+<li> test.py: driver of game </li>
+<li> test_classes.py: implementation of the game </li>
+<li> load_moves.py: insert Moves into database </li>
+<li> load_types.py: insert types of Pokemon into database (deprecated, no longer necessary) </li>
+</ul>
+
 <ul> <h5> TO DO: </h5>
 <li> Various battle and move effects - OF MAIN IMPORTANCE </li>
 <li> Effort values and individual values </li>
