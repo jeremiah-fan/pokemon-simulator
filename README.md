@@ -14,14 +14,14 @@
 <li> load_types.py: insert types of Pokemon into database (deprecated, no longer necessary) </li>
 </ul>
 
-<ul> <h5> TO DO: </h5>
+<ul> <h3> TO DO: </h3>
 <li> Various battle and move effects - OF MAIN IMPORTANCE </li>
 <li> Effort values and individual values </li>
 <li> Priority </li>
 <li> Natures </li>
 </ul>
 
-<ul> <h5> COMPLETED FUNCTIONALITY: </h5>
+<ul> <h3> COMPLETED FUNCTIONALITY: </h3>
 <li> 11/11/2016 - Pokemon now have random moves from the pool of moves they can potentially learn using many to many relationship </li>
 <li> 11/04/2016 - Types and type matchups, move damage classes, switching </li>
 <li> 11/01/2016 - Shell and interaction created, establishes player vs. AI, simple priority calculations, damage calculations, full caching of Pokemon </li>
