@@ -148,6 +148,8 @@ class Trainer:
 							pkmnname = cur.fetchone()[0]
 							print('No input, selecting random Pokemon: {}'.format(pkmnname))
 							break;
+						else:
+							print('Not a valid Pokemon name, try again')
 					elif not pkmnname.isdigit():
 						cur.execute('''
 						SELECT * FROM BasePokemon WHERE name = ?
@@ -261,7 +263,14 @@ class Pokemon:
 		self.trainer = trainer
 		self.name = name
 		self.faint = False
-		self.moves = [Move('Tackle')] * Pokemon.NUM_MOVES
+		cur.execute('''
+		SELECT move.name FROM BasePokemon as pkmn JOIN MovesManager JOIN Moves as move
+		ON pkmn.id = MovesManager.pokemon_id AND MovesManager.move_id = move.id
+		WHERE pkmn.name = ?
+		ORDER BY RANDOM()
+		LIMIT 4
+		''', (name, ))
+		self.moves = [Move(movename[0]) for movename in cur.fetchall()]
 		self.level = 50
 		cur.execute('''
 		SELECT type1, type2, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD FROM BasePokemon WHERE name = ?
@@ -280,9 +289,12 @@ class Pokemon:
 		if move.damage_class == "Physical":
 			attstat = Pokemon.ATT
 			defstat = Pokemon.DEF
-		else: #if move is special, use the special att and special def stats to calculate dmg
+		elif move.damage_class == "Special": #if move is special, use the special att and special def stats to calculate dmg
 			attstat = Pokemon.SPATT
 			defstat = Pokemon.SPDEF
+		else: #Status move
+			return pkmn.takedmg(0)
+			
 		#damage formula, not accounting for STAB and type and the weird small modifiers
 		dmg = (((2 * self.level + 10) / 250) * (self.stats[attstat] / pkmn.stats[defstat]) * move.power + 2) * random.uniform(0.85, 1)
 		
@@ -315,6 +327,7 @@ class Pokemon:
 		return self.faint
 
 class Move:
+	# Type matchup chart
 	typechart = {'Normal': {'Rock': 0.5, 'Ghost': 0, 'Steel': 0.5},
 				'Fire': {'Fire': 0.5, 'Water': 0.5, 'Grass': 2, 'Ice': 2, 'Bug': 2, 'Rock': 0.5, 'Dragon': 0.5, 'Steel': 2},
 				'Water': {'Fire': 2, 'Water': 0.5, 'Grass': 0.5, 'Ground': 2, 'Rock': 2, 'Dragon': 0.5},
@@ -337,7 +350,18 @@ class Move:
 				
 	def __init__(self, name):
 		self.name = name
-		self.power = 50
-		self.type = 'Normal'
-		self.damage_class = 'Physical'
+		cur.execute('''
+		SELECT type, damageClass, basePower, accuracy, PP, priority
+		FROM Moves WHERE name = ?
+		''', (name, ))
+		self.type, self.damage_class, self.power, self.accuracy, self.PP, self.priority = cur.fetchone() #Unpack the results of our query, which is a tuple
+		if self.power == None:
+			self.power = 0
+		else:
+			self.power = int(self.power) # Remember that we stored the accuracy and power as strings in case we had null for either of them
+		
+		if self.accuracy == None:
+			self.accuracy = -1 # To the program, we will represent moves that cannot miss as having -1 accuracy. This will make our checking easier. The user will be unaware, of course
+		else:
+			self.accuracy = int(self.accuracy)
 		
