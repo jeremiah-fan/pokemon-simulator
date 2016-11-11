@@ -227,7 +227,7 @@ class Trainer:
 				self.showPkmn()
 				goback = False
 				while True:
-					pkmnname = input('Pokemon to switch to: (press b to go back)')
+					pkmnname = input('Pokemon to switch to (press b to go back): ')
 					if pkmnname == 'b':
 						goback = True
 						break
@@ -277,7 +277,7 @@ class Pokemon:
 		return self.trainer
 	
 	def inflictdmg(self, move, pkmn):
-		if move.damage_class == "physical":
+		if move.damage_class == "Physical":
 			attstat = Pokemon.ATT
 			defstat = Pokemon.DEF
 		else: #if move is special, use the special att and special def stats to calculate dmg
@@ -302,7 +302,7 @@ class Pokemon:
 			print('It\'s not very effective...')
 		dmg *= type_multiplier
 		
-		if random.random() < 0.0625:
+		if random.random() < 0.0625 and type_multiplier > 0:
 			print('A critical hit!')
 			dmg *= 1.5 #specific to generation VI
 		
@@ -339,5 +339,5 @@ class Move:
 		self.name = name
 		self.power = 50
 		self.type = 'Normal'
-		self.damage_class = 'physical'
+		self.damage_class = 'Physical'
 		

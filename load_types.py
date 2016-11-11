@@ -23,16 +23,6 @@ def main():
 	INSERT INTO BasePokemon (id, name, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD)
 	SELECT id, name, baseHP, baseATT, baseDEF, baseSPATT, baseSPDEF, baseSPD FROM Temp;
 	DROP TABLE Temp;
-
-	ALTER TABLE Moves RENAME TO Temp;
-	CREATE TABLE Moves (
-		id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
-		name TEXT,
-		type TEXT DEFAULT '',
-		basePower INTEGER NOT NULL
-	);
-	INSERT INTO Moves (id, name, basePower) SELECT id, name, basePower FROM Temp;
-	DROP TABLE Temp;
 	''')
 	
 	cur.execute('''
