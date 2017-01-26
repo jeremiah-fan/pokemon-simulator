@@ -4,10 +4,7 @@ import json
 import time
 
 SERVICEURL = 'http://pokeapi.co/api/v2/'
-def main():
-	conn = sqlite3.connect('cache.db')
-	cur = conn.cursor()
-	cur.executescript('''
+CREATEMOVES='''
 	CREATE TABLE IF NOT EXISTS MovesManager (
 		pokemon_id INTEGER,
 		move_id INTEGER,
@@ -25,8 +22,49 @@ def main():
 		PP INTEGER NOT NULL,
 		priority INTEGER NOT NULL
 	);
+	'''
+def addstatchanges():
+	cur.executescript('''
+	ALTER TABLE Moves ADD COLUMN stat_boosts INTEGER;
 	''')
-	
+	cur.execute('''
+	SELECT name, formatted_name FROM Moves ORDER BY id
+	''')
+	for name, formatted_name in cur.fetchall():
+		print('Processing {}...'.format(formatted_name))
+		req = urllib.request.Request(
+			'{}move/{}'.format(SERVICEURL, name),
+			data=None,
+			headers={
+				'User-Agent': 'Chrome/54.0.2840.71'
+			}
+		)
+		contents = urllib.request.urlopen(req).read().decode('utf-8')
+		jsmoves = json.loads(str(contents))
+		NUMSTATS = 5
+		stat_boosts = [6] * NUMSTATS
+		for stat in jsmoves["stat_changes"]:
+			statname = stat["stat"]["name"]
+			statchange = stat["change"]
+			if statname == "attack":
+				stat_boosts[0] += statchange
+			elif statname == "defense":
+				stat_boosts[1] += statchange
+			elif statname == "special-attack":
+				stat_boosts[2] += statchange
+			elif statname == "special-defense":
+				stat_boosts[3] += statchange
+			elif statname == "speed":
+				stat_boosts[4] += statchange
+		print('\tStat Changes:', stat_boosts, '({})'.format(', '.join([str(stat - 6) for stat in stat_boosts])))
+		cur.execute('''
+		UPDATE Moves
+		SET stat_boosts = ?
+		WHERE name = ?
+		''', (int(''.join([str(stat) for stat in stat_boosts]), 16), name))
+		time.sleep(1)
+		
+def linkmoves():
 	cur.execute('''
 	SELECT name, id FROM BasePokemon ORDER BY id
 	''')
@@ -79,6 +117,50 @@ def main():
 		print()
 		conn.commit()
 		time.sleep(60)
+		
+def main():
+	conn = sqlite3.connect('cache.db')
+	cur = conn.cursor()
+	cur.executescript('''
+	ALTER TABLE Moves ADD COLUMN stat_boosts INTEGER;
+	''')
+	cur.execute('''
+	SELECT name, formatted_name FROM Moves ORDER BY id
+	''')
+	for name, formatted_name in cur.fetchall():
+		print('Processing {}...'.format(formatted_name))
+		req = urllib.request.Request(
+			'{}move/{}'.format(SERVICEURL, name),
+			data=None,
+			headers={
+				'User-Agent': 'Chrome/54.0.2840.71'
+			}
+		)
+		contents = urllib.request.urlopen(req).read().decode('utf-8')
+		jsmoves = json.loads(str(contents))
+		NUMSTATS = 5
+		stat_boosts = [6] * NUMSTATS
+		for stat in jsmoves["stat_changes"]:
+			statname = stat["stat"]["name"]
+			statchange = stat["change"]
+			if statname == "attack":
+				stat_boosts[0] += statchange
+			elif statname == "defense":
+				stat_boosts[1] += statchange
+			elif statname == "special-attack":
+				stat_boosts[2] += statchange
+			elif statname == "special-defense":
+				stat_boosts[3] += statchange
+			elif statname == "speed":
+				stat_boosts[4] += statchange
+		print('\tStat Changes:', stat_boosts, '({})'.format(', '.join([str(stat - 6) for stat in stat_boosts])))
+		cur.execute('''
+		UPDATE Moves
+		SET stat_boosts = ?
+		WHERE name = ?
+		''', (int(''.join([str(stat) for stat in stat_boosts]), 16), name))
+		time.sleep(1)
+	conn.commit()
 	
 if __name__ == "__main__":
 	main()

@@ -80,9 +80,9 @@ class GameManager:
 		print('What will {} do?\n'.format(player_pkmn.name))
 	
 	def priority(self, player_pkmn, opponent_pkmn):
-		if player_pkmn.stats[Pokemon.SPD] > opponent_pkmn.stats[Pokemon.SPD]:
+		if player_pkmn.calcStat(Pokemon.SPD) > opponent_pkmn.calcStat(Pokemon.SPD):
 			return (player_pkmn, opponent_pkmn)
-		elif player_pkmn.stats[Pokemon.SPD] < opponent_pkmn.stats[Pokemon.SPD]:
+		elif player_pkmn.calcStat(Pokemon.SPD) < opponent_pkmn.calcStat(Pokemon.SPD):
 			return (opponent_pkmn, player_pkmn)
 		else:
 			options = [(player_pkmn, opponent_pkmn), (opponent_pkmn, player_pkmn)]
@@ -97,21 +97,33 @@ class GameManager:
 		if player.type == Trainer.OPPONENT:
 			attackmsg = 'The opposing {}'.format(attackmsg)
 		print(attackmsg)
-		if pkmn.inflictdmg(move, rcvPkmn) == True:
-			faintmsg = '{} fainted!'.format(rcvPkmn.name)
-			if receiver.type == Trainer.OPPONENT:
-				faintmsg = 'The opposing {}'.format(faintmsg)
-			print(faintmsg)
-			receiver.sendNewPkmn()
-			if receiver.getNumPkmn() == 0:
+		
+		if move.stat_boosts != 0x66666:
+			stats = move.stat_boosts
+			stat = 5
+			while stats > 0:
+				if (stats & 0xF) - 6 != 0:
+					pkmn.increaseStatStage(stat, (stats & 0xF) - 6)
+				stat -= 1
+				stats >>= 4
+			print(pkmn.getAllStatBoost())
+				
+		if move.power > 0:
+			if pkmn.inflictdmg(move, rcvPkmn) == True: #does move faint pokemon?
+				faintmsg = '{} fainted!'.format(rcvPkmn.name)
 				if receiver.type == Trainer.OPPONENT:
-					print('You defeated {}!'.format(receiver.name))
+					faintmsg = 'The opposing {}'.format(faintmsg)
+				print(faintmsg)
+				receiver.sendNewPkmn()
+				if receiver.getNumPkmn() == 0:
+					if receiver.type == Trainer.OPPONENT:
+						print('You defeated {}!'.format(receiver.name))
+					else:
+						print('You lost to {}!'.format(player.name))
+					self.gameover = True
 				else:
-					print('You lost to {}!'.format(player.name))
-				self.gameover = True
-			else:
-				print('{} sent out {}!'.format(receiver.name, receiver.getCurPkmn().name))
-			return 0 #Turn ends
+					print('{} sent out {}!'.format(receiver.name, receiver.getCurPkmn().name))
+				return 0 #Turn ends
 		return 1 #Turn continues
 	
 	def turn(self):
@@ -264,7 +276,7 @@ class Pokemon:
 		self.name = name
 		self.faint = False
 		cur.execute('''
-		SELECT move.name FROM BasePokemon as pkmn JOIN MovesManager JOIN Moves as move
+		SELECT move.formatted_name FROM BasePokemon as pkmn JOIN MovesManager JOIN Moves as move
 		ON pkmn.id = MovesManager.pokemon_id AND MovesManager.move_id = move.id
 		WHERE pkmn.name = ?
 		ORDER BY RANDOM()
@@ -277,10 +289,10 @@ class Pokemon:
 		''', (name, ))
 		queryresults = cur.fetchone()
 		self.type = (queryresults[0], queryresults[1])
-		basestats = list(queryresults[2:])
-		self.stats = [(x * 2 + 31) * self.level // 100 + 5 for x in basestats]
-		self.stats[0] += self.level + 5
-		self.maxHP = self.stats[0]
+		self.stats = [(base_stat * 2 + 31) * self.level // 100 + 5 for base_stat in queryresults[2:] ]
+		self.stats[Pokemon.HP] += self.level + 5
+		self.maxHP = self.stats[Pokemon.HP]
+		self.statboosts = 0x66666
 	
 	def getTrainer(self):
 		return self.trainer
@@ -296,7 +308,7 @@ class Pokemon:
 			return pkmn.takedmg(0)
 			
 		#damage formula, not accounting for STAB and type and the weird small modifiers
-		dmg = (((2 * self.level + 10) / 250) * (self.stats[attstat] / pkmn.stats[defstat]) * move.power + 2) * random.uniform(0.85, 1)
+		dmg = (((2 * self.level + 10) / 250) * (self.calcStat(attstat) / pkmn.calcStat(defstat)) * move.power + 2) * random.uniform(0.85, 1)
 		
 		if self.type[0] == move.type or (self.type[1] != None and self.type[1] == move.type):
 			dmg *= 1.5 #Same Type Attack Bonus (STAB)
@@ -325,6 +337,57 @@ class Pokemon:
 		if self.stats[Pokemon.HP] == 0:
 			self.faint = True
 		return self.faint
+		
+	def calcStat(self, stat):
+		assert(stat >= 1 and stat <= 5)
+		statboost = self.getStatBoost(stat)
+		statmultiplier = abs(statboost) / 2 + 1
+		if statboost < 0:
+			statmultiplier = 1 / statmultiplier
+		return self.stats[stat] * statmultiplier
+		
+	def getStatBoost(self, stat): #Stage of a particular stat
+		assert(stat >= 1 and stat <= 5) # ATT -> 1, DEF -> 2, ..., SPD -> 5
+		return (self.statboosts >> 4 * (5 - stat) & 0xF) - 6
+	
+	def getAllStatBoost(self):
+		return [ int(stat, 16) for stat in hex(self.statboosts)[2:] ]
+	
+	def changeAllStats(self, statboosts):
+		assert(statboosts >= 0 and statboosts <= 0xCCCCC)
+		self.statboosts += statboosts - 0x66666
+		return self.statboosts
+		
+	def increaseStatStage(self, stat, stage):
+		assert(stat >= 1 and stat <= 5)
+		
+		currentStat = self.getStatBoost(stat)
+		if stage > 0:
+			change = min(6, currentStat + stage) - currentStat
+			if change == 0:
+				print("{}'s _____ won't go any higher!".format(self.name))
+			elif change == 1:
+				print("{}'s _____ rose!".format(self.name))
+			elif change == 2:
+				print("{}'s ______ rose sharply!".format(self.name))
+			elif change == 3:
+				print("{}'s ______ rose drastically!".format(self.name))
+			else:
+				print("THis is belly drum")
+		else:
+			change = max(-6, currentStat + stage) - currentStat
+			if change == 0:
+				print("{}'s _____ won't go any lower!".format(self.name))
+			elif change == -1:
+				print("{}'s _____ fell!".format(self.name))
+			elif change == -2:
+				print("{}'s ______ harshly fell!".format(self.name))
+			elif change == -3:
+				print("{}'s ______ severely fell!".format(self.name))
+			else:
+				print("THis is momento") 
+		self.statboosts = self.statboosts & ~(0xF << 4 * (5 - stat)) | ((currentStat + 6 + change) << 4 * (5 - stat))
+		return self.statboosts
 
 class Move:
 	# Type matchup chart
@@ -351,14 +414,14 @@ class Move:
 	def __init__(self, name):
 		self.name = name
 		cur.execute('''
-		SELECT type, damageClass, basePower, accuracy, PP, priority
-		FROM Moves WHERE name = ?
+		SELECT type, damage_class, power, accuracy, PP, priority, stat_boosts
+		FROM Moves WHERE formatted_name = ?
 		''', (name, ))
-		self.type, self.damage_class, self.power, self.accuracy, self.PP, self.priority = cur.fetchone() #Unpack the results of our query, which is a tuple
+		self.type, self.damage_class, self.power, self.accuracy, self.PP, self.priority, self.stat_boosts = cur.fetchone() #Unpack the results of our query, which is a tuple
 		if self.power == None:
 			self.power = 0
 		else:
-			self.power = int(self.power) # Remember that we stored the accuracy and power as strings in case we had null for either of them
+			self.power = self.power # Remember that we stored the accuracy and power as strings in case we had null for either of them
 		
 		if self.accuracy == None:
 			self.accuracy = -1 # To the program, we will represent moves that cannot miss as having -1 accuracy. This will make our checking easier. The user will be unaware, of course
