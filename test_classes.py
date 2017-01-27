@@ -79,38 +79,43 @@ class GameManager:
 		print('HP: {}/{}'.format(player_pkmn.stats[Pokemon.HP], player_pkmn.maxHP))
 		print('What will {} do?\n'.format(player_pkmn.name))
 	
-	def priority(self, player_pkmn, opponent_pkmn):
-		if player_pkmn.calcStat(Pokemon.SPD) > opponent_pkmn.calcStat(Pokemon.SPD):
-			return (player_pkmn, opponent_pkmn)
+	def _order(self, player_pkmn_move, opponent_pkmn_move):
+		player_pkmn, opponent_pkmn = self._player.getCurPkmn(), self._opponent.getCurPkmn()
+		if player_pkmn_move.priority > opponent_pkmn_move.priority:
+			return Trainer.PLAYER
+		elif player_pkmn_move.priority < opponent_pkmn_move.priority:
+			return Trainer.OPPONENT
+		elif player_pkmn.calcStat(Pokemon.SPD) > opponent_pkmn.calcStat(Pokemon.SPD):
+			return Trainer.PLAYER
 		elif player_pkmn.calcStat(Pokemon.SPD) < opponent_pkmn.calcStat(Pokemon.SPD):
-			return (opponent_pkmn, player_pkmn)
+			return Trainer.OPPONENT
 		else:
-			options = [(player_pkmn, opponent_pkmn), (opponent_pkmn, player_pkmn)]
-			return random.choice(options) #Speed Tie, ordering is randomly determined
+			return random.choice([Trainer.PLAYER, Trainer.OPPONENT]) #Speed Tie, ordering is randomly determined
 	
-	def execMove(self, player, move, receiver):
-		if move == None:
+	#def _target(self.)
+	def execMove(self, user_pkmn, user_move, receiver_pkmn):
+		if user_move == None:
 			return 1
-		pkmn = player.getCurPkmn()
-		rcvPkmn = receiver.getCurPkmn()
-		attackmsg = '{} used {}!'.format(pkmn.name, move.name)
-		if player.type == Trainer.OPPONENT:
+		user = user_pkmn.getTrainer()
+		receiver = receiver_pkmn.getTrainer()
+		attackmsg = '{} used {}!'.format(user_pkmn.name, user_move.name)
+		if user.type == Trainer.OPPONENT:
 			attackmsg = 'The opposing {}'.format(attackmsg)
 		print(attackmsg)
 		
-		if move.stat_boosts != 0x66666:
-			stats = move.stat_boosts
+		if user_move.stat_boosts != 0x66666:
+			stats = user_move.stat_boosts
 			stat = 5
 			while stats > 0:
 				if (stats & 0xF) - 6 != 0:
-					pkmn.increaseStatStage(stat, (stats & 0xF) - 6)
+					user_pkmn.increaseStatStage(stat, (stats & 0xF) - 6)
 				stat -= 1
 				stats >>= 4
-			print(pkmn.getAllStatBoost())
+			print(user_pkmn.getAllStatBoost())
 				
-		if move.power > 0:
-			if pkmn.inflictdmg(move, rcvPkmn) == True: #does move faint pokemon?
-				faintmsg = '{} fainted!'.format(rcvPkmn.name)
+		if user_move.power > 0:
+			if user_pkmn.inflictdmg(user_move, receiver_pkmn) == True: #does move faint pokemon?
+				faintmsg = '{} fainted!'.format(receiver_pkmn.name)
 				if receiver.type == Trainer.OPPONENT:
 					faintmsg = 'The opposing {}'.format(faintmsg)
 				print(faintmsg)
@@ -119,7 +124,7 @@ class GameManager:
 					if receiver.type == Trainer.OPPONENT:
 						print('You defeated {}!'.format(receiver.name))
 					else:
-						print('You lost to {}!'.format(player.name))
+						print('You lost to {}!'.format(user.name))
 					self.gameover = True
 				else:
 					print('{} sent out {}!'.format(receiver.name, receiver.getCurPkmn().name))
@@ -129,10 +134,14 @@ class GameManager:
 	def turn(self):
 		self.gameturn += 1
 		self.display()
-		ordering = self.priority(self._player.getCurPkmn(), self._opponent.getCurPkmn()) #Tuple of two Pokemon
-		moves = (ordering[0].getTrainer().getMove(), ordering[1].getTrainer().getMove())
-		if self.execMove(ordering[0].getTrainer(), moves[0], ordering[1].getTrainer()) == 1:
-			self.execMove(ordering[1].getTrainer(), moves[1], ordering[0].getTrainer())	
+		player_pkmn_move, opponent_pkmn_move = self._player.getMove(), self._opponent.getMove()
+		order = self._order(player_pkmn_move, opponent_pkmn_move) #Either 0 or 1
+		if order == Trainer.PLAYER:
+			if self.execMove(self._player.getCurPkmn(), player_pkmn_move, self._opponent.getCurPkmn()) == 1:
+				self.execMove(self._opponent.getCurPkmn(), opponent_pkmn_move, self._player.getCurPkmn())
+		else:
+			if self.execMove(self._opponent.getCurPkmn(), opponent_pkmn_move, self._player.getCurPkmn()) == 1:
+				self.execMove(self._player.getCurPkmn(), player_pkmn_move, self._opponent.getCurPkmn())
 
 class Trainer:
 	NUM_PKMN = 6
@@ -306,6 +315,10 @@ class Pokemon:
 			defstat = Pokemon.SPDEF
 		else: #Status move
 			return pkmn.takedmg(0)
+		
+		if move.accuracy != -1 and random.randint(1, 100) > move.accuracy:
+			print('The attack missed!')
+			return pkmn.takedmg(0)
 			
 		#damage formula, not accounting for STAB and type and the weird small modifiers
 		dmg = (((2 * self.level + 10) / 250) * (self.calcStat(attstat) / pkmn.calcStat(defstat)) * move.power + 2) * random.uniform(0.85, 1)
@@ -414,10 +427,10 @@ class Move:
 	def __init__(self, name):
 		self.name = name
 		cur.execute('''
-		SELECT type, damage_class, power, accuracy, PP, priority, stat_boosts
+		SELECT type, damage_class, power, accuracy, PP, priority, stat_boosts, effect_chance, target
 		FROM Moves WHERE formatted_name = ?
 		''', (name, ))
-		self.type, self.damage_class, self.power, self.accuracy, self.PP, self.priority, self.stat_boosts = cur.fetchone() #Unpack the results of our query, which is a tuple
+		self.type, self.damage_class, self.power, self.accuracy, self.PP, self.priority, self.stat_boosts, self.effect_chance, self.target = cur.fetchone() #Unpack the results of our query, which is a tuple
 		if self.power == None:
 			self.power = 0
 		else:

@@ -122,7 +122,8 @@ def main():
 	conn = sqlite3.connect('cache.db')
 	cur = conn.cursor()
 	cur.executescript('''
-	ALTER TABLE Moves ADD COLUMN stat_boosts INTEGER;
+	ALTER TABLE Moves ADD COLUMN effect_chance INTEGER;
+	ALTER TABLE Moves ADD COLUMN target TEXT;
 	''')
 	cur.execute('''
 	SELECT name, formatted_name FROM Moves ORDER BY id
@@ -138,27 +139,12 @@ def main():
 		)
 		contents = urllib.request.urlopen(req).read().decode('utf-8')
 		jsmoves = json.loads(str(contents))
-		NUMSTATS = 5
-		stat_boosts = [6] * NUMSTATS
-		for stat in jsmoves["stat_changes"]:
-			statname = stat["stat"]["name"]
-			statchange = stat["change"]
-			if statname == "attack":
-				stat_boosts[0] += statchange
-			elif statname == "defense":
-				stat_boosts[1] += statchange
-			elif statname == "special-attack":
-				stat_boosts[2] += statchange
-			elif statname == "special-defense":
-				stat_boosts[3] += statchange
-			elif statname == "speed":
-				stat_boosts[4] += statchange
-		print('\tStat Changes:', stat_boosts, '({})'.format(', '.join([str(stat - 6) for stat in stat_boosts])))
+		print("\tTarget: {}".format(jsmoves["target"]["name"]))
 		cur.execute('''
 		UPDATE Moves
-		SET stat_boosts = ?
+		SET effect_chance = ?, target = ?
 		WHERE name = ?
-		''', (int(''.join([str(stat) for stat in stat_boosts]), 16), name))
+		''', (jsmoves["effect_chance"], jsmoves["target"]["name"], name))
 		time.sleep(1)
 	conn.commit()
 	
