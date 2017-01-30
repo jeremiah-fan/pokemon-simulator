@@ -103,18 +103,12 @@ class GameManager:
 			attackmsg = 'The opposing {}'.format(attackmsg)
 		print(attackmsg)
 		
-		if user_move.stat_boosts != 0x66666:
-			stats = user_move.stat_boosts
-			stat = 5
-			while stats > 0:
-				if (stats & 0xF) - 6 != 0:
-					user_pkmn.increaseStatStage(stat, (stats & 0xF) - 6)
-				stat -= 1
-				stats >>= 4
+		if user_move.hasStatChange() and user_move.damage_class == "Status":
+			user_pkmn.changeAllStats(user_move.stat_boosts)
 			print(user_pkmn.getAllStatBoost())
 				
-		if user_move.power > 0:
-			if user_pkmn.inflictdmg(user_move, receiver_pkmn) == True: #does move faint pokemon?
+		if user_move.power > 0 and user_pkmn.inflictdmg(user_move, receiver_pkmn) == True: #does move do damage?
+			if not receiver_pkmn.isAlive(): #does move faint pokemon?
 				faintmsg = '{} fainted!'.format(receiver_pkmn.name)
 				if receiver.type == Trainer.OPPONENT:
 					faintmsg = 'The opposing {}'.format(faintmsg)
@@ -129,6 +123,10 @@ class GameManager:
 				else:
 					print('{} sent out {}!'.format(receiver.name, receiver.getCurPkmn().name))
 				return 0 #Turn ends
+			elif user_move.hasStatChange() and random.randint(1, 100) <= user_move.effect_chance: #non-status move
+				print('effect goes here')
+				user_pkmn.changeAllStats(user_move.stat_boosts)
+				print(user_pkmn.getAllStatBoost())
 		return 1 #Turn continues
 	
 	def turn(self):
@@ -283,7 +281,6 @@ class Pokemon:
 	def __init__(self, name, trainer):
 		self.trainer = trainer
 		self.name = name
-		self.faint = False
 		cur.execute('''
 		SELECT move.formatted_name FROM BasePokemon as pkmn JOIN MovesManager JOIN Moves as move
 		ON pkmn.id = MovesManager.pokemon_id AND MovesManager.move_id = move.id
@@ -305,6 +302,9 @@ class Pokemon:
 	
 	def getTrainer(self):
 		return self.trainer
+		
+	def isAlive(self):
+		return self.stats[Pokemon.HP] > 0
 	
 	def inflictdmg(self, move, pkmn):
 		if move.damage_class == "Physical":
@@ -320,8 +320,16 @@ class Pokemon:
 			print('The attack missed!')
 			return pkmn.takedmg(0)
 			
+		critical = random.random() < 0.0625 #Critical hit or no, 6.25% for critical hit
+		if critical == True: #Critical hits ignore stat changes
+			attacking_stat = self.stats[attstat]
+			defending_stat = self.stats[defstat]
+		else:
+			attacking_stat = self.calcStat(attstat)
+			defending_stat = self.calcStat(defstat)
+		
 		#damage formula, not accounting for STAB and type and the weird small modifiers
-		dmg = (((2 * self.level + 10) / 250) * (self.calcStat(attstat) / pkmn.calcStat(defstat)) * move.power + 2) * random.uniform(0.85, 1)
+		dmg = (((2 * self.level + 10) / 250) * (attacking_stat / defending_stat) * move.power + 2) * random.uniform(0.85, 1)
 		
 		if self.type[0] == move.type or (self.type[1] != None and self.type[1] == move.type):
 			dmg *= 1.5 #Same Type Attack Bonus (STAB)
@@ -343,13 +351,12 @@ class Pokemon:
 			print('A critical hit!')
 			dmg *= 1.5 #specific to generation VI
 		
-		return pkmn.takedmg(int(dmg))
+		pkmn.takedmg(int(dmg))
+		return int(dmg) != 0
 	
 	def takedmg(self, amt):
 		self.stats[Pokemon.HP] = max(0, self.stats[Pokemon.HP] - amt)
-		if self.stats[Pokemon.HP] == 0:
-			self.faint = True
-		return self.faint
+		return self.isAlive()
 		
 	def calcStat(self, stat):
 		assert(stat >= 1 and stat <= 5)
@@ -368,7 +375,13 @@ class Pokemon:
 	
 	def changeAllStats(self, statboosts):
 		assert(statboosts >= 0 and statboosts <= 0xCCCCC)
-		self.statboosts += statboosts - 0x66666
+		stat = 5 #Work our way backwards
+		while statboosts > 0:
+			statboost = (statboosts & 0xF) - 6
+			if statboost != 0:
+				self.increaseStatStage(stat, statboost)
+			stat -= 1
+			statboosts >>= 4
 		return self.statboosts
 		
 	def increaseStatStage(self, stat, stage):
@@ -440,4 +453,7 @@ class Move:
 			self.accuracy = -1 # To the program, we will represent moves that cannot miss as having -1 accuracy. This will make our checking easier. The user will be unaware, of course
 		else:
 			self.accuracy = int(self.accuracy)
+	
+	def hasStatChange(self):
+		return 0x66666 != self.stat_boosts
 		
