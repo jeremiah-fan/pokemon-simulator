@@ -81,9 +81,14 @@ class GameManager:
 	
 	def _order(self, player_pkmn_move, opponent_pkmn_move):
 		player_pkmn, opponent_pkmn = self._player.getCurPkmn(), self._opponent.getCurPkmn()
-		if player_pkmn_move.priority > opponent_pkmn_move.priority:
+		if player_pkmn_move != None and opponent_pkmn_move != None:
+			if player_pkmn_move.priority > opponent_pkmn_move.priority:
+				return Trainer.PLAYER
+			elif player_pkmn_move.priority < opponent_pkmn_move.priority:
+				return Trainer.OPPONENT
+		elif player_pkmn_move == None and opponent_pkmn_move != None: #Player switches
 			return Trainer.PLAYER
-		elif player_pkmn_move.priority < opponent_pkmn_move.priority:
+		elif player_pkmn_move != None and opponent_pkmn_move == None: #Opponent switches
 			return Trainer.OPPONENT
 		elif player_pkmn.calcStat(Pokemon.SPD) > opponent_pkmn.calcStat(Pokemon.SPD):
 			return Trainer.PLAYER
@@ -94,18 +99,30 @@ class GameManager:
 	
 	#def _target(self.)
 	def execMove(self, user_pkmn, user_move, receiver_pkmn):
-		if user_move == None:
-			return 1
 		user = user_pkmn.getTrainer()
 		receiver = receiver_pkmn.getTrainer()
+		
+		if user_move == None:
+			user.switch()
+			return 1
+		
 		attackmsg = '{} used {}!'.format(user_pkmn.name, user_move.name)
 		if user.type == Trainer.OPPONENT:
 			attackmsg = 'The opposing {}'.format(attackmsg)
 		print(attackmsg)
 		
+		target = user_move.getTarget()
+		if target == Move.ALLY or target == Move.ALL or target == Move.OTHER:
+			print('But it failed!')
+			return 1
+		
 		if user_move.hasStatChange() and user_move.damage_class == "Status":
-			user_pkmn.changeAllStats(user_move.stat_boosts)
-			print(user_pkmn.getAllStatBoost())
+			if target == Move.PLAYER:
+				user_pkmn.changeAllStats(user_move.stat_boosts)
+				#print(user_pkmn.getAllStatBoost())
+			else:
+				receiver_pkmn.changeAllStats(user_move.stat_boosts)
+				#print(receiver_pkmn.getAllStatBoost())
 				
 		if user_move.power > 0 and user_pkmn.inflictdmg(user_move, receiver_pkmn) == True: #does move do damage?
 			if not receiver_pkmn.isAlive(): #does move faint pokemon?
@@ -125,8 +142,12 @@ class GameManager:
 				return 0 #Turn ends
 			elif user_move.hasStatChange() and random.randint(1, 100) <= user_move.effect_chance: #non-status move
 				print('effect goes here')
-				user_pkmn.changeAllStats(user_move.stat_boosts)
-				print(user_pkmn.getAllStatBoost())
+				if target == Move.PLAYER:
+					user_pkmn.changeAllStats(user_move.stat_boosts)
+					#print(user_pkmn.getAllStatBoost())
+				else:
+					receiver_pkmn.changeAllStats(user_move.stat_boosts)
+					#print(receiver_pkmn.getAllStatBoost())
 		return 1 #Turn continues
 	
 	def turn(self):
@@ -217,6 +238,7 @@ class Trainer:
 				self._trainer_pkmn.append(Pokemon(cur.fetchone()[0], self))
 				
 		self.cur_pkmn_index = 0
+		self.switch_pkmn_index = -1
 	
 	def getCurPkmn(self):
 		return self._trainer_pkmn[self.cur_pkmn_index]
@@ -228,44 +250,49 @@ class Trainer:
 		self.cur_pkmn_index += 1
 		
 	def showPkmn(self):
-		for pkmn in self._trainer_pkmn:
-			print('{name} Lv. {lv}\n{type}\n{curHP}/{maxHP}'.format(name=pkmn.name, lv=pkmn.level, type='/'.join([x for x in pkmn.type if x != None]), curHP=pkmn.stats[Pokemon.HP], maxHP=pkmn.maxHP))
-		print()
+		COLS = 2
+		print('\n'.join(['{0.name} Lv. {0.level}\t\t{1.name} Lv. {1.level}'.format(*pair) for pair in [self._trainer_pkmn[i:i + COLS] for i in range(0, len(self._trainer_pkmn), COLS)]]))
+		#for pkmn in self._trainer_pkmn:
+			#print('{name} Lv. {lv}\n{type}\n{curHP}/{maxHP}'.format(name=pkmn.name, lv=pkmn.level, type='/'.join([x for x in pkmn.type if x != None]), curHP=pkmn.stats[Pokemon.HP], maxHP=pkmn.maxHP))
+		#print()
 	
-	def switch(self, pkmn):
-		pkmn_index = self._trainer_pkmn.index(pkmn)
-		self._trainer_pkmn[self.cur_pkmn_index], self._trainer_pkmn[pkmn_index] = self._trainer_pkmn[pkmn_index], self._trainer_pkmn[self.cur_pkmn_index]
+	def switch(self):
+		assert(self.switch_pkmn_index >= 1 and self.switch_pkmn_index <= 5)
+		print('{trainer} withdrew {name}!'.format(trainer=self.name, name=self.getCurPkmn().name))
+		self._trainer_pkmn[self.cur_pkmn_index], self._trainer_pkmn[self.switch_pkmn_index] = self._trainer_pkmn[self.switch_pkmn_index], self._trainer_pkmn[self.cur_pkmn_index]
+		print('{trainer} sent out {name}!'.format(trainer=self.name, name=self.getCurPkmn().name))
 	
-	def getMove(self):
+	def getMove(self): #Returns index of move
 		pkmn = self.getCurPkmn()
 		if self.type == Trainer.OPPONENT:
-			return random.choice(pkmn.moves)
+			return random.choice(pkmn.moves) # Randomly get a move
+		
+		showparty = False
 		while True:
-			movenum = input('{0}(1) {1}(2) {2}(3) {3}(4) Party(p): '.format(pkmn.moves[0].name, pkmn.moves[1].name, pkmn.moves[2].name, pkmn.moves[3].name))
-			if movenum.isdigit() and int(movenum) >= 1 and int(movenum) <= 4:
-				return pkmn.moves[int(movenum) - 1]
-			elif movenum == 'p':
-				self.showPkmn()
-				goback = False
-				while True:
-					pkmnname = input('Pokemon to switch to (press b to go back): ')
-					if pkmnname == 'b':
-						goback = True
-						break
-					find = [x for x in self._trainer_pkmn if x.name == pkmnname.capitalize()]
-					if len(find) > 0:
-						pkmn = find[0]
-						if pkmn.stats[Pokemon.HP] > 0:
-							print('{trainer} withdrew {name}!'.format(trainer=self.name, name=self.getCurPkmn().name))
-							self.switch(pkmn)
-							print('{trainer} sent out {name}!'.format(trainer=self.name, name=self.getCurPkmn().name))
-							break
-						print('That Pokemon is too weak to fight!')
-					print('Not a valid Pokemon name, try again')
-				if goback == False:
-					return None
+			if showparty == False:
+				movenum = input('{}(1) {}(2) {}(3) {}(4) Party(p): '.format(*(o.name for o in pkmn.moves)))
+				if movenum.isdigit() and int(movenum) >= 1 and int(movenum) <= 4:
+					return pkmn.moves[int(movenum) - 1] # Number (not index) of the move to use
+				elif movenum == 'p':
+					self.showPkmn()
+					showparty = True
+				else:
+					print("Oak's words echoed... There's a time and place for everything but not now!")
 			else:
-				print("Oak's words echoed... There's a time and place for everything but not now!")
+				pkmnchoice = input('Pokemon to switch to (1 - 6, press b to go back): ')
+				if pkmnchoice.isdigit() and int(pkmnchoice) >= 1 and int(pkmnchoice) <= 6:
+					pkmnchoice = int(pkmnchoice)
+					if pkmnchoice == 1:
+						print('That Pokemon is already in battle!')
+					elif self._trainer_pkmn[pkmnchoice - 1].stats[Pokemon.HP] <= 0:
+						print('That Pokemon is too weak to fight!')
+					else:
+						self.switch_pkmn_index = pkmnchoice - 1
+						return None # Switches take up a move but are not actually one
+				elif pkmnchoice == 'b':
+					showparty = False
+				else:
+					print("Oak's words echoed... There's a time and place for everything but not now!")
 		
 class Pokemon:
 	NUM_MOVES = 4
@@ -314,11 +341,11 @@ class Pokemon:
 			attstat = Pokemon.SPATT
 			defstat = Pokemon.SPDEF
 		else: #Status move
-			return pkmn.takedmg(0)
+			return False
 		
 		if move.accuracy != -1 and random.randint(1, 100) > move.accuracy:
 			print('The attack missed!')
-			return pkmn.takedmg(0)
+			return False
 			
 		critical = random.random() < 0.0625 #Critical hit or no, 6.25% for critical hit
 		if critical == True: #Critical hits ignore stat changes
@@ -417,6 +444,12 @@ class Pokemon:
 
 class Move:
 	# Type matchup chart
+	PLAYER = 0
+	OPPONENT = 1
+	ALLY = 2
+	ALL = 3
+	OTHER = 4
+	
 	typechart = {'Normal': {'Rock': 0.5, 'Ghost': 0, 'Steel': 0.5},
 				'Fire': {'Fire': 0.5, 'Water': 0.5, 'Grass': 2, 'Ice': 2, 'Bug': 2, 'Rock': 0.5, 'Dragon': 0.5, 'Steel': 2},
 				'Water': {'Fire': 2, 'Water': 0.5, 'Grass': 0.5, 'Ground': 2, 'Rock': 2, 'Dragon': 0.5},
@@ -436,6 +469,23 @@ class Move:
 				'Steel': {'Fire': 0.5, 'Water': 0.5, 'Electric': 0.5, 'Ice': 2, 'Rock': 2, 'Steel': 0.5, 'Fairy': 2},
 				'Fairy': {'Fire': 0.5, 'Fighting': 2, 'Poison': 0.5, 'Dragon': 2, 'Dark': 2, 'Steel': 0.5}
 				}
+	
+	#TODO: this only works for single battle, we need to modify this later if we expand to double/triple battle
+	targetchart = {'specific-move': OTHER,
+				   'selected-pokemon-me-first': OPPONENT,
+				   'ally': ALLY,
+				   'users-field': PLAYER,
+				   'user-or-ally': PLAYER,
+				   'opponents-field': OPPONENT,
+				   'user': PLAYER,
+				   'random-opponent': OPPONENT,
+				   'all-other-pokemon': OPPONENT,
+				   'selected-pokemon': OPPONENT,
+				   'all-opponents': OPPONENT,
+				   'entire-field': ALL,
+				   'user-and-allies': PLAYER, #change later
+				   'all-pokemon': ALL
+				   }
 				
 	def __init__(self, name):
 		self.name = name
@@ -453,7 +503,11 @@ class Move:
 			self.accuracy = -1 # To the program, we will represent moves that cannot miss as having -1 accuracy. This will make our checking easier. The user will be unaware, of course
 		else:
 			self.accuracy = int(self.accuracy)
+		#print(Move.targetchart[self.target])
 	
 	def hasStatChange(self):
 		return 0x66666 != self.stat_boosts
+		
+	def getTarget(self): # Trainer or Opponent or Ally?
+		return Move.targetchart[self.target]
 		
