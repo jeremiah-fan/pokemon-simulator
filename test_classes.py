@@ -8,10 +8,10 @@ import sqlite3
 import urllib.request
 import random
 SERVICEURL = 'http://pokeapi.co/api/v2/'
-	
+
 conn = sqlite3.connect('cache.db')
 cur = conn.cursor()
-cur.executescript('''
+'''cur.executescript(''
 CREATE TABLE IF NOT EXISTS BasePokemon (
 	id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT UNIQUE,
 	name TEXT,
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS Pokemon (
 	move4_id INTEGER,
 	PRIMARY KEY(pokemon_id, move1_id, move2_id, move3_id, move4_id)
 )
-''')
+'')'''
 		
 class GameManager:
 	def __init__(self):
@@ -90,7 +90,8 @@ class GameManager:
 			return Trainer.PLAYER
 		elif player_pkmn_move != None and opponent_pkmn_move == None: #Opponent switches
 			return Trainer.OPPONENT
-		elif player_pkmn.calcStat(Pokemon.SPD) > opponent_pkmn.calcStat(Pokemon.SPD):
+		
+		if player_pkmn.calcStat(Pokemon.SPD) > opponent_pkmn.calcStat(Pokemon.SPD):
 			return Trainer.PLAYER
 		elif player_pkmn.calcStat(Pokemon.SPD) < opponent_pkmn.calcStat(Pokemon.SPD):
 			return Trainer.OPPONENT
@@ -141,7 +142,7 @@ class GameManager:
 					print('{} sent out {}!'.format(receiver.name, receiver.getCurPkmn().name))
 				return 0 #Turn ends
 			elif user_move.hasStatChange() and random.randint(1, 100) <= user_move.effect_chance: #non-status move
-				print('effect goes here')
+				#print('effect goes here')
 				if target == Move.PLAYER:
 					user_pkmn.changeAllStats(user_move.stat_boosts)
 					#print(user_pkmn.getAllStatBoost())
@@ -161,7 +162,9 @@ class GameManager:
 		else:
 			if self.execMove(self._opponent.getCurPkmn(), opponent_pkmn_move, self._player.getCurPkmn()) == 1:
 				self.execMove(self._player.getCurPkmn(), player_pkmn_move, self._opponent.getCurPkmn())
-
+				
+		#end of turn events
+		
 class Trainer:
 	NUM_PKMN = 6
 	PLAYER = 0
@@ -304,6 +307,12 @@ class Pokemon:
 	SPATT = 3
 	SPDEF = 4
 	SPD = 5
+	TRANSLATION = { HP: 'HP',
+					ATT: 'attack',
+					DEF: 'defense',
+					SPATT: 'special attack',
+					SPDEF: 'special defense',
+					SPD: 'speed' }
 	
 	def __init__(self, name, trainer):
 		self.trainer = trainer
@@ -414,29 +423,34 @@ class Pokemon:
 	def increaseStatStage(self, stat, stage):
 		assert(stat >= 1 and stat <= 5)
 		
+		if self.trainer.type == Trainer.PLAYER:
+			text = ""
+		else:
+			text = "The opposing "
+			
 		currentStat = self.getStatBoost(stat)
 		if stage > 0:
 			change = min(6, currentStat + stage) - currentStat
 			if change == 0:
-				print("{}'s _____ won't go any higher!".format(self.name))
+				print("{}{}'s {} won't go any higher!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			elif change == 1:
-				print("{}'s _____ rose!".format(self.name))
+				print("{}{}'s {} rose!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			elif change == 2:
-				print("{}'s ______ rose sharply!".format(self.name))
+				print("{}{}'s {} rose sharply!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			elif change == 3:
-				print("{}'s ______ rose drastically!".format(self.name))
+				print("{}{}'s {} rose drastically!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			else:
 				print("THis is belly drum")
 		else:
 			change = max(-6, currentStat + stage) - currentStat
 			if change == 0:
-				print("{}'s _____ won't go any lower!".format(self.name))
+				print("{}{}'s {} won't go any lower!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			elif change == -1:
-				print("{}'s _____ fell!".format(self.name))
+				print("{}{}'s {} fell!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			elif change == -2:
-				print("{}'s ______ harshly fell!".format(self.name))
+				print("{}{}'s {} harshly fell!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			elif change == -3:
-				print("{}'s ______ severely fell!".format(self.name))
+				print("{}{}'s {} severely fell!".format(text, self.name, Pokemon.TRANSLATION[stat]))
 			else:
 				print("THis is momento") 
 		self.statboosts = self.statboosts & ~(0xF << 4 * (5 - stat)) | ((currentStat + 6 + change) << 4 * (5 - stat))
