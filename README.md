@@ -15,8 +15,8 @@
 </ul>
 
 <ul> <h3> TO DO: </h3>
-<li> 
-<ul> Various battle and move effects - OF MAIN IMPORTANCE
+<li> Various battle and move effects - OF MAIN IMPORTANCE
+<ul> 
 <li> End of turn effects, like weather and terrains </li>
 <li> Status effects </li>
 <li> Forced switching </li>
