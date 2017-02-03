@@ -77,7 +77,6 @@ class GameManager:
 		print()
 		print('{} Lv. {}'.format(player_pkmn.name, player_pkmn.level))
 		print('HP: {}/{}'.format(player_pkmn.stats[Pokemon.HP], player_pkmn.maxHP))
-		print('What will {} do?\n'.format(player_pkmn.name))
 	
 	def _order(self, player_pkmn_move, opponent_pkmn_move):
 		player_pkmn, opponent_pkmn = self._player.getCurPkmn(), self._opponent.getCurPkmn()
@@ -273,7 +272,8 @@ class Trainer:
 		showparty = False
 		while True:
 			if showparty == False:
-				movenum = input('{}(1) {}(2) {}(3) {}(4) Party(p): '.format(*(o.name for o in pkmn.moves)))
+				movenum = input('What will {} do?\n{}(1) {}(2) {}(3) {}(4) Party(p): '.format(pkmn.name, *(o.name for o in pkmn.moves)))
+				print()
 				if movenum.isdigit() and int(movenum) >= 1 and int(movenum) <= 4:
 					return pkmn.moves[int(movenum) - 1] # Number (not index) of the move to use
 				elif movenum == 'p':
@@ -283,6 +283,7 @@ class Trainer:
 					print("Oak's words echoed... There's a time and place for everything but not now!")
 			else:
 				pkmnchoice = input('Pokemon to switch to (1 - 6, press b to go back): ')
+				print()
 				if pkmnchoice.isdigit() and int(pkmnchoice) >= 1 and int(pkmnchoice) <= 6:
 					pkmnchoice = int(pkmnchoice)
 					if pkmnchoice == 1:
@@ -411,13 +412,13 @@ class Pokemon:
 	
 	def changeAllStats(self, statboosts):
 		assert(statboosts >= 0 and statboosts <= 0xCCCCC)
-		stat = 5 #Work our way backwards
-		while statboosts > 0:
-			statboost = (statboosts & 0xF) - 6
+		
+		stat = 4
+		while stat >= 0:
+			statboost = ((statboosts >> stat * 4)& 0xF) - 6
 			if statboost != 0:
-				self.increaseStatStage(stat, statboost)
+				self.increaseStatStage(5 - stat, statboost) #5 is the length of our statboosts
 			stat -= 1
-			statboosts >>= 4
 		return self.statboosts
 		
 	def increaseStatStage(self, stat, stage):
